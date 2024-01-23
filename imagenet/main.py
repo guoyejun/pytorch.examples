@@ -341,20 +341,20 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
             s = torch.cuda.Stream()
             s.wait_stream(torch.cuda.current_stream())
             with torch.cuda.stream(s):
-                output, loss = one_iter_eager(model, images, criterion, target, optimizer)
-                output, loss = one_iter_eager(model, images, criterion, target, optimizer)
-                output, loss = one_iter_eager(model, images, criterion, target, optimizer)
+                output = model(images)
+                loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
             torch.cuda.current_stream().wait_stream(s)
             # record
             g = torch.cuda.CUDAGraph()
             optimizer.zero_grad(set_to_none=True)
-            static_images = images
-            static_target = target
+            static_images = images.clone()
+            static_target = target.clone()
             with torch.cuda.graph(g):
-                static_output, static_loss = one_iter_eager(model, static_images, criterion, static_target, optimizer)
-            g.replay()
-            print("after first replay")
-            print(static_output)
+                static_output = model(static_images)
+                static_loss = criterion(static_output, static_target)
+                static_loss.backward()            
             # return the result of warm up at the first time
             return [output, loss]
         
@@ -363,6 +363,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         if static_target.data_ptr() != target.data_ptr():
             static_target.copy_(target)
         g.replay()
+        optimizer.step()
         return [static_output, static_loss]
             
     if args.mode == "compile_graph":
