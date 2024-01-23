@@ -325,16 +325,16 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         output = model(images)
         loss = criterion(output, target)
 
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
-
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
