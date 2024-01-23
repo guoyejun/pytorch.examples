@@ -77,6 +77,7 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 parser.add_argument('--dummy', action='store_true', help="use fake data to benchmark")
+parser.add_argument('--mode', type=str, choices=['eager', 'compile', 'eager_graph', 'compile_graph'], default='eager')
 
 best_acc1 = 0
 
@@ -321,6 +322,11 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         loss.backward()
         optimizer.step()
         return [output, loss]
+
+    if args.mode == "compile_graph":
+        one_iter = torch.compile(one_iter, mode="reduce-overhead")
+    if args.mode == "compile":
+        one_iter = torch.compile(one_iter)
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
