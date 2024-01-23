@@ -312,6 +312,16 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
     # switch to train mode
     model.train()
 
+    def one_iter(model, images, target):
+        # compute output
+        output = model(images)
+        loss = criterion(output, target)
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        return [output, loss]
+
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
@@ -321,14 +331,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
-        # compute output
-        output = model(images)
-        loss = criterion(output, target)
-
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        output, loss = one_iter(model, images, target)
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
