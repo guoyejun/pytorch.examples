@@ -365,7 +365,15 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         g.replay()
         optimizer.step()
         return [static_output, static_loss]
-            
+
+    captured = False            
+    def one_iter_eager_graph2(model, images, criterion, target, optimizer):
+        nonlocal captured
+        if not captured:
+            captured = True
+            model = torch.cuda.make_graphed_callables(model, (images, ))
+        return one_iter_eager(model, images, criterion, target, optimizer)
+        
     if args.mode == "compile_graph":
         one_iter = torch.compile(one_iter_eager, mode="reduce-overhead")
     if args.mode == "compile":
@@ -373,7 +381,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
     if args.mode == "eager":
         one_iter = one_iter_eager
     if args.mode == "eager_graph":
-        one_iter = one_iter_eager_graph
+        one_iter = one_iter_eager_graph2
         
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
