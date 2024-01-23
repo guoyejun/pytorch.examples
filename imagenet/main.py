@@ -313,21 +313,49 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
     # switch to train mode
     model.train()
 
-    def one_iter(model, images, target):
+    def one_iter_eager(model, images, criterion, target, optimizer):
         # compute output
         output = model(images)
         loss = criterion(output, target)
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        optimizer.step()        
         return [output, loss]
 
+    recorded = False
+    def one_iter_eager_graph(model, images, criterion, target, optimizer):
+        nonlocal recorded
+        if not recorded:
+            recorded = True
+            # warm up
+            output, loss = one_iter_eager(model, images, criterion, target, optimizer)
+            torch.cuda.synchronize()
+            # record
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                static_images = images
+                static_target = target
+                static_output, static_loss = one_iter_eager(model, images, criterion, target, optimizer)
+            # return the result of warm up at the first time
+            return [output, loss]
+        
+        if static_images.data_ptr() != images.data_ptr():
+            static_images.copy_(images)
+        if static_target.data_ptr() != target.data_ptr():
+            static_target.copy_(target)
+        g.replay()
+        return static_output, static_loss
+            
     if args.mode == "compile_graph":
-        one_iter = torch.compile(one_iter, mode="reduce-overhead")
+        one_iter = torch.compile(one_iter_eager, mode="reduce-overhead")
     if args.mode == "compile":
-        one_iter = torch.compile(one_iter)
-
+        one_iter = torch.compile(one_iter_eager)
+    if args.mode == "eager":
+        one_iter = one_iter_eager
+    if args.mode == "eager_graph":
+        one_iter = one_iter_eager_graph
+        
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
@@ -337,7 +365,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
-        output, loss = one_iter(model, images, target)
+        output, loss = one_iter(model, images, criterion, target, optimizer)
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
