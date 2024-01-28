@@ -315,8 +315,9 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
 
     def one_iter_eager(model, images, criterion, target, optimizer):
         # compute output
-        output = model(images)
-        loss = criterion(output, target)
+        with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16):
+            output = model(images)
+            loss = criterion(output, target)
         # compute gradient and do SGD step
         loss.backward()
         optimizer.step()
@@ -371,7 +372,8 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         nonlocal captured
         if not captured:
             captured = True
-            model = torch.cuda.make_graphed_callables(model, (images, ))
+            with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16, cache_enabled=False):
+                model = torch.cuda.make_graphed_callables(model, (images, ))
         return one_iter_eager(model, images, criterion, target, optimizer)
         
     if args.mode == "compile_graph":
